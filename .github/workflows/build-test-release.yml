@@ -25,18 +25,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [linux, macos, windows]
-        arch: [amd64, arm64]
-        exclude:
-          - platform: windows
-            arch: arm64
         include:
           - platform: linux
             os: ubuntu-latest
+            arch: amd64
           - platform: macos
             os: macos-latest
+            arch: arm64
           - platform: windows
             os: windows-latest
+            arch: amd64
     env:
       GOOS: ${{ fromJson('{"linux":"linux","macos":"darwin","windows":"windows"}')[matrix.platform] }}
       GOARCH: ${{ matrix.arch }}
@@ -69,7 +67,7 @@ jobs:
           mkdir -p "package/$NAME"
           mv app/"$LIB" "package/$NAME/"
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            (cd package && zip -r "$NAME.zip" "$NAME")
+            (cd package && 7z a "$NAME.zip" "$NAME")
             echo "ARTIFACT=$PWD/package/$NAME.zip" >> $GITHUB_ENV
           else
             tar -C package -czf "package/$NAME.tar.gz" "$NAME"
