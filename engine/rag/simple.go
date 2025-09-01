@@ -1,9 +1,8 @@
 package rag
 
 import (
-	"encoding/json"
-	"math"
-	"github.com/example/xdesktopagent/engine/repo"
+       "math"
+       "github.com/example/xdesktopagent/engine/repo"
 )
 
 func decodeEmb(b []byte) []float64 {
