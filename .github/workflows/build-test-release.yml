@@ -45,24 +45,18 @@ jobs:
         with:
           go-version-file: engine/go.mod
           cache: true
-      - run: |
-          rm -f go.sum
-          go mod tidy
-          go mod verify
-        working-directory: engine
-      - run: go test ./...
+      - run: make deps-go
+      - run: make test-go
         if: matrix.arch == 'amd64'
-        working-directory: engine
       - name: Build library
         run: |
           mkdir -p app
+          make build-go GOOS=${{ env.GOOS }} GOARCH=${{ env.GOARCH }}
           case "${{ matrix.platform }}" in
-            linux)   LIB=libnavi.so ;;
-            macos)   LIB=libnavi.dylib ;;
-            windows) LIB=navi.dll ;;
+            linux)   LIB=libnavi_engine.so ;;
+            macos)   LIB=libnavi_engine.dylib ;;
+            windows) LIB=navi_engine.dll ;;
           esac
-          export LIBNAME="$LIB"
-          bash scripts/build_go.sh
           NAME="navi-${{ matrix.platform }}-${{ matrix.arch }}"
           mkdir -p "package/$NAME"
           mv app/"$LIB" "package/$NAME/"
@@ -98,8 +92,7 @@ jobs:
         with:
           go-version-file: engine/go.mod
           cache: true
-      - run: go test ./...
-        working-directory: engine
+      - run: make test-go
 
   fixtures:
     needs: build
