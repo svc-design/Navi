@@ -6,13 +6,15 @@ GOOS   ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 # uname 在 Windows(MSYS/Cygwin) 会是 MINGW*；在 GitHub Actions Windows 原生是 OS=Windows_NT
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
-OS_VAR  := $(OS)  # Windows 原生命令行下会有 OS=Windows_NT
+# Windows 原生命令行下会有 OS=Windows_NT
+OS_VAR  := $(strip $(OS))
 ifeq ($(OS_VAR),Windows_NT)
   HOST_OS := Windows
 else ifneq (,$(findstring MINGW,$(UNAME_S)))
   HOST_OS := Windows
 else
-  HOST_OS := $(UNAME_S) # Darwin / Linux / ...
+  # Darwin / Linux / ...
+  HOST_OS := $(strip $(UNAME_S))
 endif
 
 LIBNAME := $(if $(filter $(GOOS),darwin),libnavi_engine.dylib,\
@@ -96,15 +98,12 @@ flutter-create:
 
 # ===== 7) 按主机 OS 选择正确的 Flutter 桌面构建目标 =====
 flutter-build-host: build-go build-pgshim flutter-create
-ifeq ($(HOST_OS),Darwin)
-	$(MAKE) flutter-build-macos
-else ifeq ($(HOST_OS),Linux)
-	$(MAKE) flutter-build-linux
-else ifeq ($(HOST_OS),Windows)
-	$(MAKE) flutter-build-windows
-else
-	@echo "Unsupported host OS: $(HOST_OS)"; exit 1
-endif
+	@case "$(HOST_OS)" in \
+	  Darwin)  $(MAKE) flutter-build-macos ;; \
+	  Linux)   $(MAKE) flutter-build-linux ;; \
+	  Windows) $(MAKE) flutter-build-windows ;; \
+	  *) echo "Unsupported host OS: $(HOST_OS)"; exit 1 ;; \
+esac
 
 flutter-build-macos: flutter-create
 	cd app && flutter config --enable-macos-desktop && flutter build macos
@@ -143,15 +142,12 @@ run-windows:
 package: package-host
 
 package-host:
-ifeq ($(HOST_OS),Darwin)
-	$(MAKE) package-macos
-else ifeq ($(HOST_OS),Linux)
-	$(MAKE) package-linux
-else ifeq ($(HOST_OS),Windows)
-	$(MAKE) package-windows
-else
-	@echo "Unsupported host OS: $(HOST_OS)"; exit 1
-endif
+	@case "$(HOST_OS)" in \
+	  Darwin)  $(MAKE) package-macos ;; \
+	  Linux)   $(MAKE) package-linux ;; \
+	  Windows) $(MAKE) package-windows ;; \
+	  *) echo "Unsupported host OS: $(HOST_OS)"; exit 1 ;; \
+esac
 
 package-macos:
 	OUT_DIR=app/build/macos/Build/Products/Release; \
