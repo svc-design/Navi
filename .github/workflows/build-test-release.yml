@@ -64,7 +64,7 @@ jobs:
               echo "ARTIFACT=$PWD/$NAME.tar.gz" >> $GITHUB_ENV
               ;;
             windows)
-              OUT_DIR=app/build/windows/runner/Release
+              OUT_DIR=app/build/windows/${{ fromJson('{"amd64":"x64","arm64":"arm64"}')[matrix.arch] }}/runner/Release
               (cd "$OUT_DIR" && 7z a "$NAME.zip" .)
               mv "$OUT_DIR/$NAME.zip" .
               echo "ARTIFACT=$PWD/$NAME.zip" >> $GITHUB_ENV
