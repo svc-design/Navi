@@ -14,7 +14,8 @@ LIBNAME := $(if $(filter $(GOOS),darwin),libnavi_engine.dylib,\
 .PHONY: all build init-db deps-go build-go test-go build-pgshim flutter-create \
 	flutter-build-host flutter-build-macos flutter-build-linux \
 	flutter-build-windows run run-macos run-linux run-windows \
-	flutter-run clean
+	flutter-run package package-host package-macos package-linux \
+	package-windows clean
 
 all: build
 
@@ -66,11 +67,11 @@ flutter-create:
 # 7) 按主机 OS 选择正确的 Flutter 桌面构建目标
 flutter-build-host: build-go build-pgshim
 ifeq ($(HOST_OS),Darwin)
-	$(MAKE) flutter-build-macos
+	$$(MAKE) flutter-build-macos
 else ifeq ($(HOST_OS),Linux)
-	$(MAKE) flutter-build-linux
+	$$(MAKE) flutter-build-linux
 else ifneq (,$(findstring MINGW,$(HOST_OS)))
-	$(MAKE) flutter-build-windows
+	$$(MAKE) flutter-build-windows
 else
 	@echo "Unsupported host OS: $(HOST_OS)"; exit 1
 endif
@@ -102,6 +103,35 @@ run-linux:
 
 run-windows:
 	cd app && flutter run -d windows
+
+# 9) Package artifacts
+package: package-host
+
+package-host:
+ifeq ($(HOST_OS),Darwin)
+	$(MAKE) package-macos
+else ifeq ($(HOST_OS),Linux)
+	$(MAKE) package-linux
+else ifneq (,$(findstring MINGW,$(HOST_OS)))
+	$(MAKE) package-windows
+else
+	@echo "Unsupported host OS: $(HOST_OS)"; exit 1
+endif
+
+package-macos:
+	OUT_DIR=app/build/macos/Build/Products/Release; \
+	NAME=navi-macos-$(GOARCH); \
+	hdiutil create -volname Navi -srcfolder "$$OUT_DIR/Navi.app" -ov -format UDZO "$$NAME.dmg"
+
+package-linux:
+	OUT_DIR=app/build/linux/x64/release/bundle; \
+	NAME=navi-linux-$(GOARCH); \
+	tar -C "$$OUT_DIR" -czf "$$NAME.tar.gz" .
+
+package-windows:
+	OUT_DIR=app/build/windows/$(if $(filter $(GOARCH),amd64),x64,$(GOARCH))/runner/Release; \
+	NAME=navi-windows-$(GOARCH); \
+	(cd "$$OUT_DIR" && 7z a "$$NAME.zip" .)
 
 # 清理（保留 Flutter 工程；若要清理 app/build 可追加）
 clean:
