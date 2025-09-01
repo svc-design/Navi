@@ -1,11 +1,13 @@
-name: xdesktopagent
-description: Minimal desktop shell calling Go via FFI
+name: navi_assistant
+description: Navi 助手 — Guiding your tasks, 快速帮你完成
 publish_to: 'none'
 environment:
   sdk: '>=3.3.0 <4.0.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   ffi: ^2.1.0
 

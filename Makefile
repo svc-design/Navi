@@ -4,7 +4,7 @@ ROOT := $(shell pwd)
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 
-LIBNAME :=   $(if $(filter $(GOOS),darwin),libxda.dylib,     $(if $(filter $(GOOS),linux),libxda.so,       $(if $(filter $(GOOS),windows),xda.dll,libxda.so)))
+LIBNAME :=   $(if $(filter $(GOOS),darwin),libnavi_engine.dylib,     $(if $(filter $(GOOS),linux),libnavi_engine.so,       $(if $(filter $(GOOS),windows),navi_engine.dll,libnavi_engine.so)))
 
 .PHONY: init-db build-go flutter-create flutter-run build-pgshim clean
 

@@ -1,4 +1,4 @@
-# XDesktopAgent — Minimal Runnable Skeleton (Dataflow×FP, Local-first)
+# Navi Assistant — Minimal Runnable Skeleton (Dataflow×FP, Local-first)
 
 This repository is a **minimal runnable** scaffold aligned with the blueprint:
 - Flutter desktop shell (UI) with **Dart FFI** calling a Go shared library.
@@ -40,7 +40,7 @@ make build-pgshim
 ## Layout
 
 ```
-xdesktopagent/
+navi/
 ├─ app/                   # Flutter app (created by make flutter-create)
 │  ├─ lib/main.dart
 │  └─ pubspec.yaml
