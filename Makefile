@@ -6,14 +6,15 @@ GOARCH ?= $(shell go env GOARCH)
 HOST_OS := $(shell uname -s)
 
 LIBNAME := $(if $(filter $(GOOS),darwin),libnavi_engine.dylib,\
-           $(if $(filter $(GOOS),linux),libnavi_engine.so,\
-           $(if $(filter $(GOOS),windows),navi_engine.dll,libnavi_engine.so)))
+	   $(if $(filter $(GOOS),linux),libnavi_engine.so,\
+	   $(if $(filter $(GOOS),windows),navi_engine.dll,libnavi_engine.so)))
 
 .DEFAULT_GOAL := build
 
-.PHONY: all build init-db build-go build-pgshim flutter-create flutter-build-host \
-        flutter-build-macos flutter-build-linux flutter-build-windows \
-        run run-macos run-linux run-windows flutter-run clean
+.PHONY: all build init-db deps-go build-go test-go build-pgshim flutter-create \
+	flutter-build-host flutter-build-macos flutter-build-linux \
+	flutter-build-windows run run-macos run-linux run-windows \
+	flutter-run clean
 
 all: build
 
@@ -21,11 +22,19 @@ all: build
 init-db:
 	python3 scripts/init_db_sqlite.py
 
-# 2) 构建 Go 引擎（你的脚本里可产出 $(LIBNAME)）
+# 2) 准备 Go 依赖
+deps-go:
+	cd engine && rm -f go.sum && go mod tidy && go mod verify
+
+# 3) 构建 Go 引擎（你的脚本里可产出 $(LIBNAME)）
 build-go:
 	bash scripts/build_go.sh
 
-# 3) 构建 Rust pgshim（release 模式）
+# 4) 运行 Go 测试
+test-go:
+	cd engine && go test ./...
+
+# 5) 构建 Rust pgshim（release 模式）
 # 使用：make build-pgshim            # 稳定工具链
 # 或 USE_NIGHTLY=1 make build-pgshim  # 夜间工具链
 build-pgshim:
@@ -36,7 +45,7 @@ build-pgshim:
 	  cargo build --release; \
 	fi
 
-# 4) 确保 Flutter 工程已存在并覆盖模板
+# 6) 确保 Flutter 工程已存在并覆盖模板
 flutter-create:
 	@if [ ! -f app/pubspec.yaml ]; then \
 	  flutter create --platforms=macos,windows,linux app; \
@@ -45,7 +54,7 @@ flutter-create:
 	cp -f app_templates/pubspec.yaml app/pubspec.yaml
 	@echo 'OK. Flutter app prepared.'
 
-# 5) 按主机 OS 选择正确的 Flutter 桌面构建目标
+# 7) 按主机 OS 选择正确的 Flutter 桌面构建目标
 flutter-build-host: flutter-create
 ifeq ($(HOST_OS),Darwin)
 	$(MAKE) flutter-build-macos
@@ -66,8 +75,8 @@ flutter-build-linux:
 flutter-build-windows:
 	cd app && flutter build windows
 
-# 6) 一键构建：数据库 -> Go -> Rust -> Flutter(按主机选择)
-build: init-db build-go build-pgshim flutter-build-host
+# 8) 一键构建：数据库 -> Go -> Rust -> Flutter(按主机选择)
+build: init-db deps-go build-go test-go build-pgshim flutter-build-host
 	@echo "✅ Build done for $(HOST_OS) ($(GOOS)/$(GOARCH))."
 
 # 便捷运行
