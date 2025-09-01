@@ -3,20 +3,21 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:ffi/ffi.dart';
 
-typedef Navi_Init_C = ffi.Int32 Function(ffi.Pointer<ffi.Utf8>);
-typedef Navi_RAG_C = ffi.Pointer<ffi.Utf8> Function(ffi.Pointer<ffi.Utf8>);
-typedef Navi_Free_C = ffi.Void Function(ffi.Pointer<ffi.Utf8>);
+typedef Navi_Init_C = ffi.Int32 Function(ffi.Pointer<Utf8>);
+typedef Navi_RAG_C = ffi.Pointer<Utf8> Function(ffi.Pointer<Utf8>);
+typedef Navi_Free_C = ffi.Void Function(ffi.Pointer<Utf8>);
 
 extension Utf8Utils on String {
-  ffi.Pointer<ffi.Utf8> toUtf8() => ffi.Utf8.toUtf8(this);
+  ffi.Pointer<Utf8> toUtf8() => toNativeUtf8();
 }
 
 class NaviEngine {
   late ffi.DynamicLibrary _lib;
-  late int Function(ffi.Pointer<ffi.Utf8>) _init;
-  late ffi.Pointer<ffi.Utf8> Function(ffi.Pointer<ffi.Utf8>) _rag;
-  late void Function(ffi.Pointer<ffi.Utf8>) _free;
+  late int Function(ffi.Pointer<Utf8>) _init;
+  late ffi.Pointer<Utf8> Function(ffi.Pointer<Utf8>) _rag;
+  late void Function(ffi.Pointer<Utf8>) _free;
 
   NaviEngine() {
     final libName = Platform.isMacOS
@@ -26,11 +27,11 @@ class NaviEngine {
             : 'libnavi_engine.so';
     _lib = ffi.DynamicLibrary.open(libName);
     _init =
-        _lib.lookupFunction<Navi_Init_C, int Function(ffi.Pointer<ffi.Utf8>)>(
+        _lib.lookupFunction<Navi_Init_C, int Function(ffi.Pointer<Utf8>)>(
             'Navi_Init');
     _rag = _lib.lookupFunction<Navi_RAG_C,
-        ffi.Pointer<ffi.Utf8> Function(ffi.Pointer<ffi.Utf8>)>('Navi_RAG');
-    _free = _lib.lookupFunction<Navi_Free_C, void Function(ffi.Pointer<ffi.Utf8>)>(
+        ffi.Pointer<Utf8> Function(ffi.Pointer<Utf8>)>('Navi_RAG');
+    _free = _lib.lookupFunction<Navi_Free_C, void Function(ffi.Pointer<Utf8>)>(
         'Navi_Free');
   }
 
@@ -38,14 +39,14 @@ class NaviEngine {
     final cfg = jsonEncode({'db_path': dbPath});
     final p = cfg.toUtf8();
     _init(p);
-    ffi.malloc.free(p);
+    malloc.free(p);
   }
 
   String rag(String question) {
     final q = jsonEncode({'question': question}).toUtf8();
     final resPtr = _rag(q);
-    ffi.malloc.free(q);
-    final res = ffi.Utf8.fromUtf8(resPtr);
+    malloc.free(q);
+    final res = resPtr.toDartString();
     _free(resPtr);
     return res;
   }

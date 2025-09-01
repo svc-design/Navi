@@ -26,6 +26,15 @@ init-db:
 deps-go:
 	cd engine && rm -f go.sum && go mod tidy && go mod verify
 
+# 额外：Linux 桌面构建所需系统依赖
+deps-linux:
+	if command -v apt-get >/dev/null; then \
+		sudo apt-get update && \
+		sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev; \
+	elif command -v dnf >/dev/null; then \
+		sudo dnf install -y clang cmake ninja-build pkgconfig gtk3-devel xz-devel; \
+	fi
+
 # 3) 构建 Go 引擎（你的脚本里可产出 $(LIBNAME)）
 build-go:
 	bash scripts/build_go.sh
@@ -69,7 +78,7 @@ endif
 flutter-build-macos:
 	cd app && flutter build macos
 
-flutter-build-linux:
+flutter-build-linux: deps-linux
 	cd app && flutter build linux
 
 flutter-build-windows:
