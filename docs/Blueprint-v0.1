@@ -1,0 +1,368 @@
+# XDesktopAgent — Cross‑platform Dataflow×FP AI Desktop Agent (Blueprint v0.1)
+
+> Tech stack: Flutter (desktop UI) · Go (engine via Dart FFI) · Local DB (Tier A: SQLite+VSS; Tier B: PostgreSQL+Timescale+AGE+pgvector) · Local/edge LLM first (Ollama/llama.cpp) · OpenTelemetry end‑to‑end.
+
+---
+
+## 0) North‑star & MVP scope
+- **Targets:** macOS, Windows, Linux. Store‑compliant where possible.
+- **Core value:** Personal agent for non‑dev users: email triage, note/knowledge search & compose, office docs assist (WPS/Office), browser assist.
+- **Principles:** *Everything is a stream* · *Nodes are pure* · *State externalized* · *Contracts first* · *Observable & explainable* · *Deterministic & testable*.
+
+**MVP capabilities**
+1. Local AI chat/command palette with streaming outputs (SSE‑like).
+2. RAG over **local notes & email** (Markdown folder + IMAP/Gmail/Outlook).
+3. Browser helper via **Native Messaging** (Chrome/Edge/Firefox) for page capture → RAG.
+4. WPS/Office integration via **file‑centric** flows (watch folders, open/export). No automation APIs needed at v1; automation added as optional plugin later.
+
+---
+
+## 1) High‑level architecture
+```mermaid
+flowchart LR
+  subgraph UI[Flutter Desktop Shell]
+    U1[Signal streams\n(clicks/keys/files/IMAP)] --> U2[Rx-like streams]
+    U2 -->|FFI| BIND[Go FFI Bridge]
+    U2 -->|SSE/WS| PREVIEW[Streamed UI]
+  end
+
+  subgraph Engine[Go Engine]
+    SCH[Scheduler\n(DAG runner, replay)]
+    NODES[Pure nodes\n(transform/feature/RAG)]
+    ADP[Adapters\n(LLM/Embedding/IMAP/VDB/Browser/WPS)]
+    POL[Policies & Gates\n(OPA/Cedar)]
+    ES[Event Store]
+  end
+
+  subgraph Data[Persistence]
+    DB[(Tier A: SQLite+VSS\nTier B: PostgreSQL+Timescale+AGE+pgvector)]
+    OO[(Object store\n(local fs))]
+  end
+
+  subgraph Obs[Observability]
+    OTL[OpenTelemetry SDK]
+    ST[Spans/metrics/logs]
+  end
+
+  BIND <--> SCH
+  SCH --> NODES --> ADP
+  SCH <---> POL
+  ES --> DB
+  ADP --> DB
+  ADP --> OO
+  SCH --> OTL --> ST
+```
+
+**Why two DB tiers?**
+- **Tier A (Store‑friendly):** SQLite + `sqlite-vss` (or `sqlite-vec`) for vectors; DuckDB optional for analytics. Bundlable, sandbox‑friendly.
+- **Tier B (Full PG stack):** use *external/local service* for power users and servers. Same repository interface, compile‑time switch or runtime flag.
+
+---
+
+## 2) Data contracts (contracts ≫ code)
+### 2.1 Event envelope (append‑only)
+```json
+{
+  "$schema": "https://xda.svc/schema/event_envelope.json",
+  "type": "object",
+  "required": ["id","ts","kind","src","payload","version"],
+  "properties": {
+    "id": {"type":"string","format":"uuid"},
+    "ts": {"type":"string","format":"date-time"},
+    "kind": {"type":"string"},                      // e.g. ui.click, email.recv, rag.query
+    "src": {"type":"string"},                       // ui, imap, browser, notes
+    "correlation_id": {"type":"string"},
+    "version": {"type":"string"},                   // flow/node version
+    "payload": {"type":"object"},                   // free, versioned by kind
+    "attrs": {"type":"object"}                      // OTel attributes subset
+  }
+}
+```
+
+### 2.2 Evidence link (explainability)
+```sql
+CREATE TABLE evidence_link (
+  id TEXT PRIMARY KEY,               -- uuid
+  cause_id TEXT NOT NULL,            -- input event id
+  effect_id TEXT NOT NULL,           -- output event id
+  node TEXT NOT NULL,                -- node name/version
+  meta JSONB NOT NULL,               -- scores, prompts, seeds, cache keys
+  ts TIMESTAMPTZ NOT NULL
+);
+```
+
+### 2.3 Vector item
+```sql
+CREATE TABLE kb_chunk (
+  id TEXT PRIMARY KEY,
+  doc_id TEXT NOT NULL,
+  kind TEXT NOT NULL,                -- note, email, web, file
+  text TEXT NOT NULL,
+  meta JSON NOT NULL,
+  embedding BLOB                     -- SQLite VSS or PG vector
+);
+```
+
+---
+
+## 3) Flow/DAG DSL (YAML)
+`flows/rag_assist_email.yaml`
+```yaml
+id: rag_assist_email
+version: 0.1.0
+sources:
+  - kind: ui.query
+  - kind: email.recv                     # optional trigger
+pipeline:
+  - node: normalize_query                # pure
+  - node: retrieve_chunks                # vector search (k=12)
+  - node: compress                       # map-reduce summarizer (seeded)
+  - node: assemble_prompt                # structured prompt with citations
+  - node: call_llm                       # controlled side effect
+  - gate: quality_check                  # BLEU/ROUGE/self-score>=0.7
+sinks:
+  - kind: ui.stream_response
+  - kind: persist.answer
+policies:
+  cache_key: "{hash(inputs)}:{model}:{seed}:{version}"
+  seed: 42
+  retry: { max: 1, backoff: 500ms }
+```
+
+---
+
+## 4) Go engine (FFI entrypoints + scheduler skeleton)
+> Build as `c-archive`/`c-shared` per platform.
+
+**engine/ffi/ffi.go**
+```go
+package main
+
+/*
+#cgo CFLAGS: -std=c11
+#include <stdint.h>
+*/
+import "C"
+import (
+  "encoding/json"
+  "time"
+)
+
+type InitConfig struct { DBMode string `json:"db_mode"`; DataDir string `json:"data_dir"` }
+
+//export XDA_Init
+func XDA_Init(cfgJSON *C.char) C.int {
+  var cfg InitConfig
+  if err := json.Unmarshal([]byte(C.GoString(cfgJSON)), &cfg); err != nil { return 1 }
+  // init: repo (sqlite/pg), otel, adapters
+  return 0
+}
+
+//export XDA_SubmitEvent
+func XDA_SubmitEvent(kind, src, payloadJSON *C.char) C.int {
+  // append to event store, schedule execution
+  _ = time.Now()
+  return 0
+}
+
+//export XDA_Tick
+func XDA_Tick() C.int { return 0 } // pump scheduler (cooperative)
+
+func main() {}
+```
+
+**engine/scheduler/scheduler.go**
+```go
+package scheduler
+
+type Node func(in any) (any, error)
+
+type Step struct { Name string; Fn Node; SideEffect bool }
+
+type Pipeline struct { Steps []Step }
+
+func (p Pipeline) Run(in any) (any, error) {
+  cur := in
+  for _, s := range p.Steps {
+    out, err := s.Fn(cur)
+    if err != nil { return nil, err }
+    cur = out
+  }
+  return cur, nil
+}
+```
+
+**engine/adapters/llm_ollama.go** (example side effect)
+```go
+package adapters
+
+import (
+  "context"; "net/http"; "io"; "strings"
+)
+
+func CallOllama(ctx context.Context, model string, prompt string) (io.ReadCloser, error) {
+  reqBody := strings.NewReader(`{"model":"`+model+`","prompt":"`+prompt+`","stream":true}`)
+  return http.DefaultClient.Post("http://127.0.0.1:11434/api/generate","application/json",reqBody)
+}
+```
+
+---
+
+## 5) Flutter desktop shell (FFI + streams)
+**lib/ffi/xda.dart**
+```dart
+import 'dart:ffi' as ffi; import 'dart:io';
+
+typedef _XDA_Init_C = ffi.Int32 Function(ffi.Pointer<ffi.Utf8>);
+typedef _XDA_SubmitEvent_C = ffi.Int32 Function(ffi.Pointer<ffi.Utf8>, ffi.Pointer<ffi.Utf8>, ffi.Pointer<ffi.Utf8>);
+
+class XDAFFI {
+  late final ffi.DynamicLibrary _lib;
+  late final ffi.Pointer<ffi.NativeFunction<_XDA_Init_C>> _init;
+  late final ffi.Pointer<ffi.NativeFunction<_XDA_SubmitEvent_C>> _submit;
+
+  XDAFFI() {
+    final path = Platform.isMacOS ? 'libxda.dylib' : Platform.isWindows ? 'xda.dll' : 'libxda.so';
+    _lib = ffi.DynamicLibrary.open(path);
+    _init = _lib.lookup('XDA_Init');
+    _submit = _lib.lookup('XDA_SubmitEvent');
+  }
+}
+```
+
+**UI stream idea**: expose `Stream<XdaToken>` fed by SSE from Go (or via FFI callbacks using `Dart_PostCObject` later). MVP can poll on a file/socket.
+
+---
+
+## 6) Persistence layers
+### Tier A (default, store‑friendly)
+- **SQLite** with `sqlite-vss` (or `sqlite-vec`) for embeddings (`BLOB`).
+- **Tables**: `event_envelope`, `evidence_link`, `kb_doc`, `kb_chunk(idx vss)`, `answer_cache`.
+- **Backups**: simple file copy; WAL mode.
+
+### Tier B (full PG stack)
+- **PostgreSQL** + `timescaledb`, `pgvector`, `age` for graph; run as **external** service.
+- **Migration notes**: repository interfaces align so flows are identical.
+
+---
+
+## 7) Connectors (adapters)
+
+### 7.1 Email (IMAP/Gmail/Outlook)
+- OAuth (Gmail, MS Graph) when available; IMAP fallback.
+- Store headers, bodies (text), metadata → index as `kb_doc/kb_chunk`.
+- Sample IMAP lib in Go: `emersion/go-imap`.
+
+### 7.2 Notes
+- Watch a **designated folder** (Markdown/Org/Docx‑to‑txt) → chunk → embed.
+- Cross‑platform file watcher: `fsnotify`.
+
+### 7.3 WPS/Office
+- v1: **file‑centric** operations only (open/export/convert) to keep stores happy.
+- v2 (non‑store or with extra entitlements): automation via
+  - Windows: COM (WPS/Office) using `ole` in Go.
+  - macOS: Apple Events (JXA/AppleScript) — **not** allowed in Mac App Store sandbox.
+
+### 7.4 Browser helper (Native Messaging)
+- Ship a Chrome/Edge/Firefox extension + a **Native Messaging host** (Go).
+- Manifest example (Windows path):
+```json
+{
+  "name": "com.xda.nmhost",
+  "description": "XDA Native Host",
+  "path": "C:\\Program Files\\XDA\\xda_nmh.exe",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://<id>/"]
+}
+```
+- Use this to capture page content & metadata into the event stream.
+
+---
+
+## 8) Observability (OTel)
+- Go: `go.opentelemetry.io/otel` + OTLP exporter → local collector or loopback http.
+- Trace every **edge** with attributes: node, inputs_hash, cache_hit, model, seed, latency, tokens.
+- Flutter: log/metrics via a thin Dart tracer (optional at v1).
+
+---
+
+## 9) Security & privacy
+- **Local‑first**; no cloud calls unless user opts‑in.
+- Secrets: macOS Keychain / Windows DPAPI / libsecret (Linux).
+- Sandboxed file access (macOS App Sandbox): security‑scoped bookmarks; document‑picker for consented folders.
+- Content hashing + **on‑device** embeddings by default (Ollama/llama.cpp); redact PII before optional remote calls.
+
+---
+
+## 10) Packaging & Store compliance
+
+### macOS
+- Two channels:
+  1) **Mac App Store**: App Sandbox ON; entitlements: `com.apple.security.network.client`, `files.user-selected.read-write`. **No AppleEvents automation** (so WPS/Office automation must be off in MAS build). Use hardened runtime. Sign + Notarize.
+  2) **Developer ID (outside MAS)**: allow AppleEvents with entitlement if needed; distribute `.dmg`.
+
+### Windows
+- Package as **MSIX**; sign with Code Signing Cert. AppContainer by default. Background activities require `runFullTrust` bridge or scheduled tasks (avoid for v1).
+
+### Linux
+- **Flatpak** (preferred) with portals for file & network; alternative AppImage for convenience.
+
+### Shared checklist
+- Single binary process (no background daemons). Avoid bundling a DB server for store builds → prefer SQLite tier.
+- No self‑updaters in MAS/MS Store builds; rely on Store updates.
+
+---
+
+## 11) Build & project layout
+```
+xdesktopagent/
+├─ app/                         # Flutter app
+│  ├─ lib/
+│  └─ linux|macos|windows/
+├─ engine/                      # Go engine
+│  ├─ adapters/
+│  ├─ scheduler/
+│  └─ ffi/
+├─ flows/
+├─ schemas/
+├─ scripts/
+│  ├─ build_go.sh               # build c-archive per platform
+│  └─ package_*.sh
+└─ LICENSE
+```
+
+**scripts/build_go.sh (sketch)**
+```bash
+set -euo pipefail
+GOOS=${GOOS:-darwin} GOARCH=${GOARCH:-arm64}
+case $GOOS in
+  darwin)  go build -buildmode=c-archive -o libxda.a ./engine/ffi ;;
+  linux)   go build -buildmode=c-shared  -o libxda.so ./engine/ffi ;;
+  windows) go build -buildmode=c-shared  -o xda.dll    ./engine/ffi ;;
+ esac
+```
+
+---
+
+## 12) Testing strategy
+- **Snapshot tests** for nodes (golden inputs/outputs). Seeded LLM calls record & replay.
+- **Contract tests** for adapters (IMAP/Gmail, Native Messaging).
+- **End‑to‑end**: run `flows/*` on canned fixtures; assert evidence links & metrics.
+
+---
+
+## 13) Roadmap (from MVP upward)
+1. **MVP**: UI shell + FFI + SQLite tier + Notes/Email ingest + RAG flow + Ollama.
+2. **Assist surfaces**: browser extension; quick actions (copy/translate/summarize).
+3. **PG tier**: external PG support (pgvector/timescaledb/AGE) for power users.
+4. **Automation plugins**: WPS/Office (Windows COM), macOS AppleEvents (non‑MAS).
+5. **Collaboration**: CRDT (Yjs) for shared notes later.
+
+---
+
+### Appendix: Contract examples
+**schemas/prompt_assemble.json** (excerpt)
+```json
+{"type":"object","required":["question","chunks"],"properties":{"question":{"type":"string"},"chunks":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"text":{"type":"string"},"source":{"type":"string"}}}}}}
+```
+
