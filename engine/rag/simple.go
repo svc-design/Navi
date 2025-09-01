@@ -1,8 +1,8 @@
 package rag
 
 import (
-	"github.com/example/navi/engine/repo"
-	"math"
+       "math"
+       "github.com/example/navi/engine/repo"
 )
 
 func decodeEmb(b []byte) []float64 {
