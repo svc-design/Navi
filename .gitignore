@@ -2,6 +2,8 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
+# === 通用 ===
+
 *.exe
 *.exe~
 *.dll
@@ -30,3 +32,70 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+.DS_Store
+*.log
+*.lock
+*.tmp
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# Flutter 构建产物
+build/
+**/build/
+**/flutter/ephemeral/
+
+# macOS (Xcode)
+*.xcworkspace/
+*.xcuserstate
+*.xcuserdatad/
+DerivedData/
+Pods/
+Runner.xcarchive/
+*.xcworkspace/xcshareddata/swiftpm/configuration
+
+# Windows / Visual Studio
+*.pdb
+*.obj
+*.exe
+*.dll
+*.lib
+*.exp
+*.ilk
+
+# Linux (CMake)
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Rust / Cargo
+target/
+**/*.rs.bk
+
+# Go
+bin/
+*.test
+*.out
+
+# === 保留 ===
+!pubspec.yaml
+!pubspec.lock
+!Cargo.toml
+!Cargo.lock
+!go.mod
+!go.sum
+
