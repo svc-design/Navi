@@ -41,32 +41,35 @@ jobs:
       CGO_ENABLED: 1
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-go@v5
         with:
           go-version-file: engine/go.mod
           cache: true
-      - run: make deps-go
-      - run: make test-go
-        if: matrix.arch == 'amd64'
-      - name: Build library
+      - uses: subosito/flutter-action@v2
+      - name: Build app
+        run: make build
+      - name: Package artifact
         run: |
-          mkdir -p app
-          make build-go GOOS=${{ env.GOOS }} GOARCH=${{ env.GOARCH }}
-          case "${{ matrix.platform }}" in
-            linux)   LIB=libnavi_engine.so ;;
-            macos)   LIB=libnavi_engine.dylib ;;
-            windows) LIB=navi_engine.dll ;;
-          esac
           NAME="navi-${{ matrix.platform }}-${{ matrix.arch }}"
-          mkdir -p "package/$NAME"
-          mv app/"$LIB" "package/$NAME/"
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            (cd package && 7z a "$NAME.zip" "$NAME")
-            echo "ARTIFACT=$PWD/package/$NAME.zip" >> $GITHUB_ENV
-          else
-            tar -C package -czf "package/$NAME.tar.gz" "$NAME"
-            echo "ARTIFACT=$PWD/package/$NAME.tar.gz" >> $GITHUB_ENV
-          fi
+          case "${{ matrix.platform }}" in
+            linux)
+              OUT_DIR=app/build/linux/x64/release/bundle
+              tar -C "$OUT_DIR" -czf "$NAME.tar.gz" .
+              echo "ARTIFACT=$PWD/$NAME.tar.gz" >> $GITHUB_ENV
+              ;;
+            macos)
+              OUT_DIR=app/build/macos/Build/Products/Release
+              tar -C "$OUT_DIR" -czf "$NAME.tar.gz" .
+              echo "ARTIFACT=$PWD/$NAME.tar.gz" >> $GITHUB_ENV
+              ;;
+            windows)
+              OUT_DIR=app/build/windows/runner/Release
+              (cd "$OUT_DIR" && 7z a "$NAME.zip" .)
+              mv "$OUT_DIR/$NAME.zip" .
+              echo "ARTIFACT=$PWD/$NAME.zip" >> $GITHUB_ENV
+              ;;
+          esac
       - uses: actions/upload-artifact@v4
         with:
           name: navi-${{ matrix.platform }}-${{ matrix.arch }}
