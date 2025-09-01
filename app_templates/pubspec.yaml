@@ -1,0 +1,13 @@
+name: xdesktopagent
+description: Minimal desktop shell calling Go via FFI
+publish_to: 'none'
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.0
+
+flutter:
+  uses-material-design: true

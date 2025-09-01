@@ -1,0 +1,14 @@
+{
+  "$schema": "https://xda.svc/schema/event_envelope.json",
+  "type": "object",
+  "required": ["id","ts","kind","src","payload","version"],
+  "properties": {
+    "id":{"type":"string"},
+    "ts":{"type":"string","format":"date-time"},
+    "kind":{"type":"string"},
+    "src":{"type":"string"},
+    "version":{"type":"string"},
+    "payload":{"type":"object"},
+    "attrs":{"type":"object"}
+  }
+}

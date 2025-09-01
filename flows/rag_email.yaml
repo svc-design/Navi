@@ -1,0 +1,14 @@
+id: rag_email_demo
+version: 0.1.0
+sources:
+  - kind: ui.query
+pipeline:
+  - node: normalize_query
+  - node: retrieve_chunks
+  - node: assemble_prompt
+  - node: call_llm  # (demo uses template answer instead)
+sinks:
+  - kind: ui.stream_response
+policies:
+  seed: 42
+  cache_key: "{hash(inputs)}:{seed}:{version}"

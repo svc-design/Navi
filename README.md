@@ -1,9 +1,67 @@
-# Overview
+# XDesktopAgent — Minimal Runnable Skeleton (Dataflow×FP, Local-first)
 
-架构图（Mermaid）与双层存储策略（默认 SQLite+VSS；可切 PG+pgvector/Timescale/AGE）。
-DAG/flow 的 YAML 示例（email 助手的 RAG 流程）。
-Go 引擎（FFI 导出 + 调度器骨架 + Ollama 适配器示例）。
-Flutter 桌面端的 Dart FFI 绑定思路与「流式 UI」。
-连接器设计：邮件（IMAP/Gmail/Outlook）、笔记文件夹、浏览器原生消息（Native Messaging）、WPS/Office（首版文件流为主）。
-OTel 可观测性、隐私安全策略。
-macOS/Windows/Linux 上架与打包要点（MAS/MSIX/Flatpak），以及脚本/目录结构和测试策略。
+This repository is a **minimal runnable** scaffold aligned with the blueprint:
+- Flutter desktop shell (UI) with **Dart FFI** calling a Go shared library.
+- Go engine (FFI) with a tiny **RAG** pipeline on **SQLite** (local).
+- Optional **pg-wire shim (Rust)** skeleton (compiles; simple SELECT 1; SQLite passthrough is TODO).
+- Schema/flow files and scripts to init demo DB with a few chunks.
+
+> Goal: after prerequisites, you can *run the Flutter app*, type a query, and get a RAG answer from local chunks.
+
+## Prerequisites
+- Flutter SDK (3.22+), Dart 3+
+- Go 1.21+
+- Rust (cargo), nightly not required
+- SQLite3 (CLI) — optional, for inspection
+
+## Quick start
+
+```bash
+# 1) Init demo DB (creates ./data/xda.db with sample docs & embeddings)
+make init-db
+
+# 2) Build Go FFI shared lib
+make build-go
+
+# 3) Create Flutter app scaffolding & run
+make flutter-create           # one-time
+make flutter-run              # runs in debug
+
+# (Optional) Build Rust pg-wire shim (listens on 127.0.0.1:6432)
+make build-pgshim
+./target/debug/pgshim --db ./data/xda.db --listen 127.0.0.1:6432
+```
+
+### Notes
+- The RAG flow uses a **naive bag-of-words embedding** to avoid external models. Replace with Ollama later.
+- If `sqlite-vss` is present, init script attempts to create a VSS index; otherwise it falls back silently.
+- Mac App Store builds should **not** run `pgshim` (no background listener).
+
+## Layout
+
+```
+xdesktopagent/
+├─ app/                   # Flutter app (created by make flutter-create)
+│  ├─ lib/main.dart
+│  └─ pubspec.yaml
+├─ engine/                # Go FFI + minimal RAG
+│  ├─ ffi/ffi.go
+│  ├─ repo/sqlite_repo.go
+│  ├─ rag/simple.go
+│  └─ go.mod
+├─ rust/pgshim/           # Rust PG-wire shim (skeleton)
+│  ├─ Cargo.toml
+│  └─ src/main.rs
+├─ flows/rag_email.yaml
+├─ schemas/
+│  └─ event_envelope.json
+├─ scripts/
+│  ├─ init_db_sqlite.py
+│  └─ build_go.sh
+├─ data/                  # created at runtime
+├─ Makefile
+└─ README.md
+```
+
+## License
+Apache-2.0
