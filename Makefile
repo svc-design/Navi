@@ -76,7 +76,7 @@ else
 endif
 
 flutter-build-macos:
-	cd app && flutter build macos
+	cd app && flutter config --enable-macos-desktop && flutter build macos
 
 flutter-build-linux: deps-linux
 	cd app && flutter build linux
