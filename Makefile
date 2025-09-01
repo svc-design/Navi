@@ -6,13 +6,15 @@ GOOS   ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 # uname 在 Windows(MSYS/Cygwin) 会是 MINGW*；在 GitHub Actions Windows 原生是 OS=Windows_NT
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
-OS_VAR  := $(OS)  # Windows 原生命令行下会有 OS=Windows_NT
+# Windows 原生命令行下会有 OS=Windows_NT
+OS_VAR  := $(strip $(OS))
 ifeq ($(OS_VAR),Windows_NT)
   HOST_OS := Windows
 else ifneq (,$(findstring MINGW,$(UNAME_S)))
   HOST_OS := Windows
 else
-  HOST_OS := $(UNAME_S) # Darwin / Linux / ...
+  # Darwin / Linux / ...
+  HOST_OS := $(strip $(UNAME_S))
 endif
 
 LIBNAME := $(if $(filter $(GOOS),darwin),libnavi_engine.dylib,\
