@@ -55,7 +55,7 @@ flutter-create:
 	@echo 'OK. Flutter app prepared.'
 
 # 7) 按主机 OS 选择正确的 Flutter 桌面构建目标
-flutter-build-host: flutter-create
+flutter-build-host: build-go build-pgshim
 ifeq ($(HOST_OS),Darwin)
 	$(MAKE) flutter-build-macos
 else ifeq ($(HOST_OS),Linux)
