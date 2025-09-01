@@ -96,15 +96,12 @@ flutter-create:
 
 # ===== 7) 按主机 OS 选择正确的 Flutter 桌面构建目标 =====
 flutter-build-host: build-go build-pgshim flutter-create
-ifeq ($(HOST_OS),Darwin)
-	$(MAKE) flutter-build-macos
-else ifeq ($(HOST_OS),Linux)
-	$(MAKE) flutter-build-linux
-else ifeq ($(HOST_OS),Windows)
-	$(MAKE) flutter-build-windows
-else
-	@echo "Unsupported host OS: $(HOST_OS)"; exit 1
-endif
+	@case "$(HOST_OS)" in \
+	  Darwin)  $(MAKE) flutter-build-macos ;; \
+	  Linux)   $(MAKE) flutter-build-linux ;; \
+	  Windows) $(MAKE) flutter-build-windows ;; \
+	  *) echo "Unsupported host OS: $(HOST_OS)"; exit 1 ;; \
+esac
 
 flutter-build-macos: flutter-create
 	cd app && flutter config --enable-macos-desktop && flutter build macos
@@ -143,15 +140,12 @@ run-windows:
 package: package-host
 
 package-host:
-ifeq ($(HOST_OS),Darwin)
-	$(MAKE) package-macos
-else ifeq ($(HOST_OS),Linux)
-	$(MAKE) package-linux
-else ifeq ($(HOST_OS),Windows)
-	$(MAKE) package-windows
-else
-	@echo "Unsupported host OS: $(HOST_OS)"; exit 1
-endif
+	@case "$(HOST_OS)" in \
+	  Darwin)  $(MAKE) package-macos ;; \
+	  Linux)   $(MAKE) package-linux ;; \
+	  Windows) $(MAKE) package-windows ;; \
+	  *) echo "Unsupported host OS: $(HOST_OS)"; exit 1 ;; \
+esac
 
 package-macos:
 	OUT_DIR=app/build/macos/Build/Products/Release; \
